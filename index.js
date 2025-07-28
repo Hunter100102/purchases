@@ -6,43 +6,30 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json()); // ✅ Middleware to parse JSON
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
 const smsRecipients = process.env.SMS_RECIPIENTS
   ? process.env.SMS_RECIPIENTS.split(',').map(num => num.trim())
   : [];
 
-function logWebhook(data) {
-  const log = `${new Date().toISOString()}\nRAW:\n${JSON.stringify(data, null, 2)}\n\n`;
-  fs.appendFileSync('square_webhook_log.txt', log);
-}
-
 app.post('/webhook', async (req, res) => {
-  const data = req.body;
-  logWebhook(data);
+  console.log('📝 Webhook received:', JSON.stringify(req.body, null, 2));
 
-  const eventType = data.type || 'unknown';
-  const object = data.data?.object || {};
-
-  let alert = false;
-  let message = '';
-
-  if (eventType === 'payment.created') {
-    const payment = object.payment || {};
-    const amountCents = payment.amount_money?.amount || 0;
-    const receipt_number = payment.receipt_number || 'UNKNOWN';
-    const note = (payment.note || '').toLowerCase();
-
-    if (note.includes('hookah')) {
-      const amount = (amountCents / 100).toFixed(2);
-      message = `🔥 Hookah purchase: Receipt #${receipt_number} - $${amount}`;
-      alert = true;
-    }
+  const payment = req.body?.data?.object?.payment;
+  if (!payment) {
+    return res.status(400).send('Invalid webhook payload');
   }
 
-  if (alert && smsRecipients.length > 0) {
+  const note = (payment.note || '').toLowerCase();
+  const receipt_number = payment.receipt_number || 'UNKNOWN';
+  const amountCents = payment.amount_money?.amount || 0;
+  const amount = (amountCents / 100).toFixed(2);
+
+  if (note.includes('hookah')) {
+    const message = `🔥 Hookah purchase: Receipt #${receipt_number} - $${amount}`;
+    console.log('📲 Sending SMS:', message);
+
     try {
       for (const recipient of smsRecipients) {
         await twilioClient.messages.create({
@@ -51,17 +38,16 @@ app.post('/webhook', async (req, res) => {
           to: recipient,
         });
       }
-      console.log('✅ Alert sent:', message);
-      res.status(200).send('Alert sent');
+      return res.status(200).send('Hookah purchase alert sent');
     } catch (err) {
-      console.error('❌ Failed to send SMS:', err);
-      res.status(500).send('Failed to send SMS');
+      console.error('❌ SMS Error:', err);
+      return res.status(500).send('Failed to send SMS');
     }
-  } else {
-    res.status(200).send(`No alert triggered. Event: ${eventType}`);
   }
+
+  res.status(200).send('No hookah detected. No alert sent.');
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Webhook server running on port ${PORT}`);
 });
