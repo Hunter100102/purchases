@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+console.log('📝 Incoming body:', req.body);
 
 app.use(express.json());
 
