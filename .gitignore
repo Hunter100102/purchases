@@ -1,0 +1,4 @@
+.env
+node_modules/
+square_webhook_log.txt
+
